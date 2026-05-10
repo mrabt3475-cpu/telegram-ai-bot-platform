@@ -20,7 +20,10 @@ export default function RootLayout({ children }) {
               </div>
               <div className="flex space-x-4">
                 <a href="/dashboard" className="text-gray-700 hover:text-primary">Dashboard</a>
+                <a href="/chat" className="text-gray-700 hover:text-primary">AI Chat</a>
+                <a href="/integrations" className="text-gray-700 hover:text-primary">Integrations</a>
                 <a href="/pricing" className="text-gray-700 hover:text-primary">Pricing</a>
+                <a href="/profile" className="text-gray-700 hover:text-primary">Profile</a>
                 <a href="/login" className="text-gray-700 hover:text-primary">Login</a>
               </div>
             </div>
