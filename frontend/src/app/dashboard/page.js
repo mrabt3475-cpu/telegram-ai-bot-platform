@@ -15,11 +15,12 @@ export default function Dashboard() {
       router.push('/login');
       return;
     }
-    fetchData(token);
-  }, [router]);
+    fetchData();
+  }, []);
 
-  const fetchData = async (token) => {
+  const fetchData = async () => {
     try {
+      const token = localStorage.getItem('token');
       const userRes = await axios.get('http://localhost:3000/api/auth/me', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -31,9 +32,8 @@ export default function Dashboard() {
     } catch (err) {
       localStorage.removeItem('token');
       router.push('/login');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   const handleLogout = () => {
@@ -51,7 +51,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             <span className="text-gray-600">{user?.username}</span>
             <span className="bg-primary text-white px-3 py-1 rounded-full text-sm">{user?.subscription}</span>
-            <button onClick={handleLogout} className="text-red-600 hover:underline">Logout</button>
+            <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
           </div>
         </div>
       </header>
@@ -72,8 +72,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">My Bots</h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">My Bots</h2>
           <button className="btn btn-primary">Create Bot</button>
         </div>
 
@@ -83,16 +83,19 @@ export default function Dashboard() {
             <button className="btn btn-primary">Create Your First Bot</button>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {bots.map((bot) => (
               <div key={bot._id} className="card">
-                <h3 className="font-semibold text-lg mb-2">{bot.name}</h3>
-                <p className="text-gray-500 text-sm mb-4">{bot.description || 'No description'}</p>
-                <div className="flex gap-2">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-lg font-semibold">{bot.name}</h3>
                   <span className={`px-2 py-1 rounded text-xs ${bot.isActive ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}`}>
                     {bot.isActive ? 'Active' : 'Inactive'}
                   </span>
-                  <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-600">{bot.aiProvider}</span>
+                </div>
+                <p className="text-gray-500 text-sm mb-4">{bot.description || 'No description'}</p>
+                <div className="flex gap-2">
+                  <button className="btn btn-secondary text-sm">Edit</button>
+                  <button className="btn btn-secondary text-sm">Settings</button>
                 </div>
               </div>
             ))}
