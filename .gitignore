@@ -3,9 +3,13 @@ node_modules/
 .env.local
 .env.*.local
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .DS_Store
 *.pem
-dist
-build
+.vercel
 .next
 out
+dist
+build
+*.log
