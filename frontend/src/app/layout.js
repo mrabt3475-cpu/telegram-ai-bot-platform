@@ -5,26 +5,24 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
   title: 'Telegram AI Bot Platform',
-  description: 'Create AI-powered Telegram bots with payments and integrations',
+  description: 'Create AI-powered Telegram bots',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={inter.className}>
-        <nav className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16 items-center">
-              <div className="flex-shrink-0">
-                <a href="/" className="text-xl font-bold text-primary">Telegram AI Bots</a>
-              </div>
-              <div className="flex space-x-4">
-                <a href="/dashboard" className="text-gray-700 hover:text-primary">Dashboard</a>
-                <a href="/chat" className="text-gray-700 hover:text-primary">AI Chat</a>
-                <a href="/integrations" className="text-gray-700 hover:text-primary">Integrations</a>
-                <a href="/pricing" className="text-gray-700 hover:text-primary">Pricing</a>
-                <a href="/profile" className="text-gray-700 hover:text-primary">Profile</a>
-                <a href="/login" className="text-gray-700 hover:text-primary">Login</a>
+        <nav className="bg-white shadow-sm sticky top-0 z-50">
+          <div className="max-w-6xl mx-auto px-4">
+            <div className="flex justify-between h-14 items-center">
+              <a href="/" className="text-lg font-bold text-primary">🤖 AI Bot</a>
+              <div className="flex items-center gap-4 text-sm">
+                <a href="/dashboard" className="text-gray-600 hover:text-primary">Dashboard</a>
+                <a href="/chat" className="text-gray-600 hover:text-primary">Chat</a>
+                <a href="/integrations" className="text-gray-600 hover:text-primary">Telegram</a>
+                <a href="/pricing" className="text-gray-600 hover:text-primary">Pricing</a>
+                <a href="/profile" className="text-gray-600 hover:text-primary">Profile</a>
+                <a href="/login" className="text-gray-600 hover:text-primary">Login</a>
               </div>
             </div>
           </div>
