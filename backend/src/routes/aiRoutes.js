@@ -4,151 +4,169 @@ const axios = require('axios');
 const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 
-const AI_PROVIDERS = {
-  'gpt-4': {
-    name: 'GPT-4',
-    endpoint: 'https://api.openai.com/v1/chat/completions',
-    model: 'gpt-4',
-    maxTokens: 4000
-  },
-  'gpt-3.5-turbo': {
-    name: 'GPT-3.5 Turbo',
-    endpoint: 'https://api.openai.com/v1/chat/completions',
-    model: 'gpt-3.5-turbo',
-    maxTokens: 2000
-  },
-  'claude-3': {
-    name: 'Claude 3',
-    endpoint: 'https://api.anthropic.com/v1/messages',
-    model: 'claude-3-opus-20240229',
-    maxTokens: 4000
-  },
-  'gemini-pro': {
-    name: 'Gemini Pro',
-    endpoint: 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent',
-    model: 'gemini-pro',
-    maxTokens: 4000
-  }
+// إعدادات الـ AI Model المخصص
+const AI_CONFIG = {
+  endpoint: process.env.AI_MODEL_ENDPOINT || 'http://localhost:5000/api/chat',
+  modelName: process.env.AI_MODEL_NAME || 'custom-ai-bot',
+  maxTokens: process.env.AI_MAX_TOKENS || 2048,
+  timeout: 30000
 };
 
+// الحصول على قائمة النماذج
 router.get('/models', (req, res) => {
-  const models = Object.entries(AI_PROVIDERS).map(([id, config]) => ({
-    id,
-    name: config.name,
-    maxTokens: config.maxTokens
-  }));
-  res.json({ success: true, models });
+  res.json({
+    success: true,
+    models: [{
+      id: 'custom-ai',
+      name: AI_CONFIG.modelName,
+      maxTokens: AI_CONFIG.maxTokens,
+      description: 'Custom AI Model'
+    }]
+  });
 });
 
+// محادثة مع الـ AI Model المخصص
 router.post('/chat', protect, async (req, res) => {
   try {
-    const { message, model, botId, history } = req.body;
-    const provider = AI_PROVIDERS[model];
-    if (!provider) {
-      return res.status(400).json({ message: 'Invalid model' });
-    }
-
+    const { message, history } = req.body;
     const user = await User.findById(req.user.id);
-    if (!user.aiApiKeys?.[model]) {
-      return res.status(400).json({ message: `API key not configured for ${provider.name}` });
+
+    // التحقق من حد الاستخدام
+    const usageLimit = user.subscription === 'free' ? 100 : 
+                       user.subscription === 'basic' ? 1000 : 
+                       user.subscription === 'premium' ? 10000 : 100000;
+    
+    if ((user.usage?.messages || 0) >= usageLimit) {
+      return res.status(429).json({ 
+        message: 'Monthly message limit reached',
+        limit: usageLimit,
+        used: user.usage?.messages
+      });
     }
 
+    // تحضير الرسائل
     const messages = [
-      { role: 'system', content: 'You are a helpful AI assistant.' },
-      ...(history || []),
+      { role: 'system', content: 'You are a helpful AI assistant in a Telegram bot platform. Respond concisely and helpfully.' },
+      ...(history || []).slice(-10), // آخر 10 رسائل
       { role: 'user', content: message }
     ];
 
-    let response;
-    if (model.startsWith('gpt')) {
-      const aiResponse = await axios.post(
-        provider.endpoint,
-        { model: provider.model, messages, max_tokens: provider.maxTokens },
-        { headers: { Authorization: `Bearer ${user.aiApiKeys[model]}`, 'Content-Type': 'application/json' } }
-      );
-      response = aiResponse.data.choices[0].message.content;
-    } else if (model === 'claude-3') {
-      const aiResponse = await axios.post(
-        provider.endpoint,
-        { model: provider.model, messages, max_tokens: provider.maxTokens },
-        { headers: { 'x-api-key': user.aiApiKeys[model], 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' } }
-      );
-      response = aiResponse.data.content[0].text;
-    } else if (model === 'gemini-pro') {
-      const aiResponse = await axios.post(
-        `${provider.endpoint}?key=${user.aiApiKeys[model]}`,
-        { contents: [{ parts: [{ text: message }] }] }
-      );
-      response = aiResponse.data.candidates[0].content.parts[0].text;
+    // طلب إلى الـ AI Model المخصص
+    const startTime = Date.now();
+    const aiResponse = await axios.post(AI_CONFIG.endpoint, {
+      messages,
+      max_tokens: AI_CONFIG.maxTokens,
+      temperature: 0.7
+    }, {
+      timeout: AI_CONFIG.timeout,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.AI_MODEL_API_KEY || ''}`
+      }
+    });
+
+    const responseTime = Date.now() - startTime;
+    const response = aiResponse.data?.response || aiResponse.data?.message || aiResponse.data?.content;
+
+    if (!response) {
+      throw new Error('Invalid AI response');
     }
 
+    // تحديث计数器
     await User.findByIdAndUpdate(req.user.id, {
       $inc: { 'usage.messages': 1 }
     });
 
-    res.json({ success: true, response, model });
+    res.json({
+      success: true,
+      response,
+      model: AI_CONFIG.modelName,
+      usage: {
+        messages: (user.usage?.messages || 0) + 1,
+        limit: usageLimit
+      },
+      responseTime
+    });
+
   } catch (error) {
-    console.error('AI Chat Error:', error.response?.data || error.message);
-    res.status(500).json({ message: error.response?.data?.error?.message || 'AI request failed' });
+    console.error('AI Chat Error:', error.message);
+    
+    if (error.code === 'ECONNABORTED') {
+      return res.status(504).json({ message: 'AI request timeout' });
+    }
+    if (error.response?.status === 429) {
+      return res.status(429).json({ message: 'Rate limit exceeded' });
+    }
+    
+    res.status(500).json({ 
+      message: error.response?.data?.message || 'AI request failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
+// إنشاء صورة (إذا كان مدعوماً)
 router.post('/image', protect, async (req, res) => {
   try {
-    const { prompt, model } = req.body;
+    const { prompt, size = '1024x1024' } = req.body;
     const user = await User.findById(req.user.id);
-    const apiKey = user.aiApiKeys?.dalle;
-    if (!apiKey) {
-      return res.status(400).json({ message: 'DALL-E API key not configured' });
+
+    // التحقق من حد الصور
+    const imageLimit = user.subscription === 'free' ? 10 : 
+                       user.subscription === 'basic' ? 50 : 
+                       user.subscription === 'premium' ? 200 : 1000;
+    
+    if ((user.usage?.images || 0) >= imageLimit) {
+      return res.status(429).json({ message: 'Image limit reached' });
     }
 
-    const response = await axios.post(
-      'https://api.openai.com/v1/images/generations',
-      { prompt, n: 1, size: '1024x1024' },
-      { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
-    );
+    // طلب إنشاء صورة
+    const aiResponse = await axios.post(`${AI_CONFIG.endpoint}/image`, {
+      prompt,
+      size
+    }, {
+      timeout: 60000,
+      headers: { 'Content-Type': 'application/json' }
+    });
 
-    res.json({ success: true, imageUrl: response.data.data[0].url });
+    const imageUrl = aiResponse.data?.url || aiResponse.data?.imageUrl;
+    
+    if (!imageUrl) {
+      throw new Error('Invalid image response');
+    }
+
+    await User.findByIdAndUpdate(req.user.id, {
+      $inc: { 'usage.images': 1 }
+    });
+
+    res.json({ success: true, imageUrl });
+
   } catch (error) {
-    res.status(500).json({ message: error.response?.data?.error?.message || 'Image generation failed' });
+    console.error('Image Error:', error.message);
+    res.status(500).json({ message: 'Image generation failed' });
   }
 });
 
-router.post('/embeddings', protect, async (req, res) => {
-  try {
-    const { text } = req.body;
-    const user = await User.findById(req.user.id);
-    const apiKey = user.aiApiKeys?.openai;
-    if (!apiKey) {
-      return res.status(400).json({ message: 'OpenAI API key not configured' });
-    }
-
-    const response = await axios.post(
-      'https://api.openai.com/v1/embeddings',
-      { model: 'text-embedding-ada-002', input: text },
-      { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
-    );
-
-    res.json({ success: true, embedding: response.data.data[0].embedding });
-  } catch (error) {
-    res.status(500).json({ message: 'Embedding generation failed' });
-  }
-});
-
+// حالة استخدام المستخدم
 router.get('/usage', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    const limits = {
+      free: { messages: 100, images: 10 },
+      basic: { messages: 1000, images: 50 },
+      premium: { messages: 10000, images: 200 },
+      enterprise: { messages: 100000, images: 1000 }
+    };
+    const plan = user.subscription || 'free';
+    
     res.json({
       success: true,
       usage: {
         messages: user.usage?.messages || 0,
-        images: user.usage?.images || 0,
-        apiRequests: user.usage?.apiRequests || 0
+        images: user.usage?.images || 0
       },
-      limits: {
-        messages: user.subscription === 'free' ? 100 : user.subscription === 'basic' ? 1000 : user.subscription === 'premium' ? 10000 : 100000,
-        images: user.subscription === 'free' ? 10 : user.subscription === 'basic' ? 50 : user.subscription === 'premium' ? 200 : 1000
-      }
+      limits: limits[plan],
+      subscription: plan
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
