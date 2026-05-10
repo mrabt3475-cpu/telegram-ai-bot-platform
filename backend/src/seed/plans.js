@@ -16,18 +16,8 @@ const plans = [
       'Community support',
       'Standard response time'
     ],
-    limits: {
-      bots: 1,
-      messagesPerMonth: 100,
-      imagesPerMonth: 10,
-      storage: 100,
-      apiCallsPerDay: 50
-    },
-    overageCosts: {
-      message: 0.002,
-      image: 0.02,
-      apiCall: 0.002
-    },
+    limits: { bots: 1, messagesPerMonth: 100, imagesPerMonth: 10, storage: 100, apiCallsPerDay: 50 },
+    overageCosts: { message: 0.002, image: 0.02, apiCall: 0.002 },
     isPublic: true,
     order: 1,
     isPopular: false,
@@ -45,21 +35,10 @@ const plans = [
       'Custom AI prompts',
       'Priority support',
       'Analytics dashboard',
-      'Basic integrations',
       'Fast response time'
     ],
-    limits: {
-      bots: 3,
-      messagesPerMonth: 5000,
-      imagesPerMonth: 100,
-      storage: 500,
-      apiCallsPerDay: 500
-    },
-    overageCosts: {
-      message: 0.001,
-      image: 0.01,
-      apiCall: 0.001
-    },
+    limits: { bots: 3, messagesPerMonth: 5000, imagesPerMonth: 100, storage: 500, apiCallsPerDay: 500 },
+    overageCosts: { message: 0.001, image: 0.01, apiCall: 0.001 },
     isPublic: true,
     order: 2,
     isPopular: false,
@@ -80,21 +59,10 @@ const plans = [
       'All integrations',
       'Custom branding',
       'Webhooks',
-      'API access',
-      'Ultra-fast response'
+      'API access'
     ],
-    limits: {
-      bots: 10,
-      messagesPerMonth: 50000,
-      imagesPerMonth: 1000,
-      storage: 2000,
-      apiCallsPerDay: 5000
-    },
-    overageCosts: {
-      message: 0.0005,
-      image: 0.005,
-      apiCall: 0.0005
-    },
+    limits: { bots: 10, messagesPerMonth: 50000, imagesPerMonth: 1000, storage: 2000, apiCallsPerDay: 5000 },
+    overageCosts: { message: 0.0005, image: 0.005, apiCall: 0.0005 },
     isPublic: true,
     order: 3,
     isPopular: true,
@@ -112,30 +80,54 @@ const plans = [
       'Custom AI model',
       'Dedicated support',
       'Custom analytics',
-      'All integrations',
       'White-label',
       'Advanced webhooks',
       'Full API access',
       'SLA guarantee',
-      'Dedicated server',
-      'Custom contracts'
+      'Dedicated server'
     ],
-    limits: {
-      bots: -1,
-      messagesPerMonth: -1,
-      imagesPerMonth: -1,
-      storage: -1,
-      apiCallsPerDay: -1
-    },
-    overageCosts: {
-      message: 0,
-      image: 0,
-      apiCall: 0
-    },
+    limits: { bots: -1, messagesPerMonth: -1, imagesPerMonth: -1, storage: -1, apiCallsPerDay: -1 },
+    overageCosts: { message: 0, image: 0, apiCall: 0 },
     isPublic: true,
     order: 4,
     isPopular: false,
     color: '#F59E0B'
+  },
+  {
+    name: 'vip_king',
+    price: 500,
+    currency: 'USD',
+    period: 'yearly',
+    description: '👑 The Ultimate VIP Experience - For Royalty Only',
+    features: [
+      '👑 Unlimited Telegram Bots',
+      '💬 Unlimited messages (no limits)',
+      '🧠 Your own Private AI Model',
+      '🔮 Priority AI processing',
+      '🎯 Custom AI fine-tuning',
+      '📊 Advanced AI Analytics',
+      '🌐 White-label solution',
+      '🔒 Private server',
+      '💎 Dedicated account manager',
+      '🎤 VIP support channel',
+      '⚡ Instant priority support',
+      '🎁 All future features included',
+      '🏆 VIP badge & status',
+      '📞 Phone support',
+      '🎫 Custom SLA',
+      '💰 Exclusive discounts',
+      '🎉 Early access to new features',
+      '🔧 Custom integrations',
+      '📈 Dedicated API throughput',
+      '🛡️ DDoS protection included'
+    ],
+    limits: { bots: -1, messagesPerMonth: -1, imagesPerMonth: -1, storage: -1, apiCallsPerDay: -1 },
+    overageCosts: { message: 0, image: 0, apiCall: 0 },
+    isPublic: true,
+    order: 5,
+    isPopular: false,
+    color: '#FFD700',
+    isVip: true
   }
 ];
 
@@ -151,7 +143,7 @@ async function seedPlans() {
     console.log(`✅ Seeded ${insertedPlans.length} pricing plans`);
     
     insertedPlans.forEach(plan => {
-      console.log(`  - ${plan.name}: $${plan.price}/month`);
+      console.log(`  - ${plan.name}: $${plan.price}/${plan.period}`);
     });
 
     process.exit(0);
