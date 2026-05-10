@@ -1,18 +1,36 @@
 version: '3.8'
+
 services:
-  mongo:
-    image: mongo:6
+  mongodb:
+    image: mongo:6.0
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+
   backend:
     build: ./backend
     ports:
       - "3000:3000"
     environment:
-      - MONGODB_URI=mongodb://mongo:27017/telegram-ai-bot-platform
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/telegram-ai-bot-platform
+      - JWT_SECRET=${JWT_SECRET}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
     depends_on:
-      - mongo
+      - mongodb
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3001:3001"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:3000/api
+    depends_on:
+      - backend
+
 volumes:
-  mongo_data:
+  mongodb_data:
