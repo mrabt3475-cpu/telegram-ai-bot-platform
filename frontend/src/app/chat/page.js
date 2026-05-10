@@ -8,8 +8,7 @@ export default function AIChat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('gpt-4');
-  const [bots, setBots] = useState([]);
+  const [usage, setUsage] = useState({ messages: 0, limit: 100 });
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -18,20 +17,21 @@ export default function AIChat() {
       router.push('/login');
       return;
     }
-    fetchBots();
+    fetchUsage();
   }, [router]);
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const fetchBots = async () => {
+  const fetchUsage = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:3000/api/bots', {
+      const res = await axios.get('http://localhost:3000/api/ai/usage', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setBots(res.data.bots);
+      setUsage(res.data.usage);
     } catch (err) {
       console.error(err);
     }
@@ -40,7 +40,7 @@ export default function AIChat() {
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
-
+    
     const userMessage = { role: 'user', content: input, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
@@ -50,13 +50,16 @@ export default function AIChat() {
       const token = localStorage.getItem('token');
       const res = await axios.post(
         'http://localhost:3000/api/ai/chat',
-        { message: input, model: selectedModel, botId: bots[0]?._id },
+        { message: input, history: messages },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      
       const aiMessage = { role: 'assistant', content: res.data.response, timestamp: new Date() };
       setMessages(prev => [...prev, aiMessage]);
+      setUsage(res.data.usage);
     } catch (err) {
-      const errorMessage = { role: 'error', content: 'Failed to get response. Please try again.', timestamp: new Date() };
+      const errorMsg = err.response?.data?.message || 'Failed to get response';
+      const errorMessage = { role: 'error', content: errorMsg, timestamp: new Date() };
       setMessages(prev => [...prev, errorMessage]);
     }
     setLoading(false);
@@ -64,65 +67,55 @@ export default function AIChat() {
 
   const clearChat = () => setMessages([]);
 
-  const models = [
-    { id: 'gpt-4', name: 'GPT-4', icon: '🤖' },
-    { id: 'gpt-3.5-turbo', name: 'GPT-3.5', icon: '⚡' },
-    { id: 'claude-3', name: 'Claude 3', icon: '🧠' },
-    { id: 'gemini-pro', name: 'Gemini Pro', icon: '✨' }
-  ];
-
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold">AI Chat</h1>
-          <nav className="flex gap-4">
-            <a href="/dashboard" className="text-gray-600 hover:text-primary">Dashboard</a>
-            <a href="/profile" className="text-gray-600 hover:text-primary">Profile</a>
-            <a href="/integrations" className="text-gray-600 hover:text-primary">Integrations</a>
-          </nav>
+        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+          <h1 className="text-xl font-bold">🤖 AI Chat</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-500">
+              {usage.messages} / {usage.limit} messages
+            </span>
+            <nav className="flex gap-3 text-sm">
+              <a href="/dashboard" className="text-gray-600 hover:text-primary">Dashboard</a>
+              <a href="/profile" className="text-gray-600 hover:text-primary">Profile</a>
+            </nav>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="card h-[calc(100vh-200px)] flex flex-col">
-          {/* Model Selector */}
-          <div className="flex items-center gap-4 pb-4 border-b">
-            <span className="text-sm text-gray-500">Model:</span>
-            <div className="flex gap-2">
-              {models.map(model => (
-                <button
-                  key={model.id}
-                  onClick={() => setSelectedModel(model.id)}
-                  className={`px-3 py-1 rounded-full text-sm ${selectedModel === model.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}`}
-                >
-                  {model.icon} {model.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
+      <main className="max-w-4xl mx-auto px-4 py-6">
+        <div className="card h-[calc(100vh-220px)] flex flex-col">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto py-4 space-y-4">
             {messages.length === 0 && (
-              <div className="text-center text-gray-500 py-8">
-                <p className="text-2xl mb-2">💬</p>
-                <p>Start a conversation with AI</p>
+              <div className="text-center text-gray-500 py-12">
+                <p className="text-4xl mb-3">🤖</p>
+                <p className="text-lg">Start chatting with AI</p>
+                <p className="text-sm mt-2">Powered by your custom AI model</p>
               </div>
             )}
+            
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[70%] p-4 rounded-lg ${msg.role === 'user' ? 'bg-primary text-white' : msg.role === 'error' ? 'bg-red-100 text-red-600' : 'bg-gray-100'}`}>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                  <span className="text-xs opacity-50 mt-2 block">
+                <div className={`max-w-[75%] p-4 rounded-2xl ${
+                  msg.role === 'user' 
+                    ? 'bg-primary text-white rounded-br-md' 
+                    : msg.role === 'error' 
+                      ? 'bg-red-100 text-red-700 rounded-bl-md'
+                      : 'bg-gray-100 rounded-bl-md'
+                }`}>
+                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  <span className="text-xs opacity-60 mt-2 block">
                     {msg.timestamp.toLocaleTimeString()}
                   </span>
                 </div>
               </div>
             ))}
+            
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-gray-100 p-4 rounded-lg">
+                <div className="bg-gray-100 p-4 rounded-2xl rounded-bl-md">
                   <div className="flex gap-1">
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
@@ -135,22 +128,32 @@ export default function AIChat() {
           </div>
 
           {/* Input */}
-          <form onSubmit={sendMessage} className="border-t pt-4 flex gap-2">
+          <form onSubmit={sendMessage} className="border-t pt-4 flex gap-3">
             <input
               type="text"
               className="input flex-1"
               placeholder="Type your message..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              disabled={loading}
+              disabled={loading || usage.messages >= usage.limit}
             />
-            <button type="submit" className="btn btn-primary" disabled={loading || !input.trim()}>
-              Send
+            <button 
+              type="submit" 
+              className="btn btn-primary px-6"
+              disabled={loading || !input.trim() || usage.messages >= usage.limit}
+            >
+              {loading ? '...' : 'Send'}
             </button>
             <button type="button" onClick={clearChat} className="btn btn-secondary">
               Clear
             </button>
           </form>
+          
+          {usage.messages >= usage.limit && (
+            <p className="text-center text-red-500 text-sm mt-2">
+              ⚠️ Monthly limit reached. Upgrade your plan for more messages.
+            </p>
+          )}
         </div>
       </main>
     </div>
