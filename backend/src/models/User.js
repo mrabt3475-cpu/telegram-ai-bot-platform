@@ -1,59 +1,80 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  subscription: { type: String, enum: ['free', 'basic', 'premium', 'enterprise'], default: 'free' },
+  username: { 
+    type: String, 
+    required: true, 
+    unique: true,
+    trim: true,
+    minLength: 3,
+    maxLength: 30
+  },
+  email: { 
+    type: String, 
+    required: true, 
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+  password: { 
+    type: String, 
+    required: true,
+    minLength: 6
+  },
+  subscription: { 
+    type: String, 
+    enum: ['free', 'basic', 'premium', 'enterprise'], 
+    default: 'free' 
+  },
   subscriptionExpiresAt: Date,
-  points: { type: Number, default: 0 },
-  referrals: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  referralCode: { type: String, unique: true },
+  points: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  referrals: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
+  }],
+  referralCode: { 
+    type: String, 
+    unique: true 
+  },
   telegramChatId: String,
-  apiKey: String,
-  apiRequestsThisMonth: { type: Number, default: 0 },
-  apiLimit: { type: Number, default: 1000 },
+  apiKey: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  apiRequestsThisMonth: { 
+    type: Number, 
+    default: 0 
+  },
+  apiLimit: { 
+    type: Number, 
+    default: 1000 
+  },
   usage: {
     messages: { type: Number, default: 0 },
     images: { type: Number, default: 0 },
     apiRequests: { type: Number, default: 0 }
   },
-  aiApiKeys: {
-    'gpt-4': String,
-    'gpt-3.5-turbo': String,
-    'claude-3': String,
-    'gemini-pro': String,
-    dalle: String,
-    openai: String
+  // إعدادات الـ AI Model المخصص
+  aiConfig: {
+    endpoint: String,
+    apiKey: String,
+    modelName: String,
+    temperature: { type: Number, default: 0.7 },
+    maxTokens: { type: Number, default: 2048 }
   },
+  // تكامل Telegram فقط
   integrations: {
-    github: {
-      accessToken: String,
-      username: String,
-      avatar: String
-    },
-    discord: {
-      accessToken: String,
-      username: String,
-      avatar: String
-    },
-    slack: {
-      accessToken: String,
-      teamId: String,
-      teamName: String
-    },
-    google: {
-      accessToken: String,
-      refreshToken: String
-    },
     telegram: {
       botToken: String,
       botUsername: String,
-      botName: String
-    },
-    whatsapp: {
-      phoneNumberId: String,
-      accessToken: String
+      botName: String,
+      isActive: { type: Boolean, default: false },
+      connectedAt: Date
     }
   },
   webhooks: [{
@@ -62,7 +83,24 @@ const userSchema = new mongoose.Schema({
     events: [String],
     createdAt: Date
   }],
-  createdAt: { type: Date, default: Date.now }
+  isActive: { type: Boolean, default: true },
+  lastLogin: Date,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// تحديث timestamp تلقائياً
+userSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
+
+// إنشاء referral code
+userSchema.pre('save', function(next) {
+  if (this.isNew && !this.referralCode) {
+    this.referralCode = `REF${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+  }
+  next();
 });
 
 module.exports = mongoose.model('User', userSchema);
