@@ -30,17 +30,41 @@ const botSchema = new mongoose.Schema({
     temperature: { type: Number, default: 0.7 },
     maxTokens: { type: Number, default: 2048 }
   },
+  // إعدادات التكلفة
+  pricing: {
+    // هل يتم charging لكل رسالة
+    isPaid: { type: Boolean, default: false },
+    // السعر لكل رسالة
+    pricePerMessage: { type: Number, default: 0 },
+    // السعر لكل صورة
+    pricePerImage: { type: Number, default: 0 },
+    // العملة
+    currency: { type: String, default: 'USD' },
+    // الرصيد المطلوب
+    requiredPoints: { type: Number, default: 0 },
+    // هل المجاني
+    isFree: { type: Boolean, default: true },
+    // حد الرسائل المجانية
+    freeMessages: { type: Number, default: 100 }
+  },
   // إعدادات المحادثة
   chatSettings: {
     maxHistory: { type: Number, default: 20 },
     language: { type: String, default: 'en' },
-    personality: { type: String, default: 'helpful' }
+    personality: { type: String, default: 'helpful' },
+    // تفعيل/تعطيل
+    isEnabled: { type: Boolean, default: true },
+    // وضع الصمت
+    isMuted: { type: Boolean, default: false }
   },
   // الإحصائيات
   stats: {
     totalMessages: { type: Number, default: 0 },
     totalUsers: { type: Number, default: 0 },
-    avgResponseTime: { type: Number, default: 0 }
+    totalRevenue: { type: Number, default: 0 },
+    avgResponseTime: { type: Number, default: 0 },
+    messagesToday: { type: Number, default: 0 },
+    messagesThisMonth: { type: Number, default: 0 }
   },
   // الحالة
   isActive: {
@@ -75,6 +99,12 @@ const botSchema = new mongoose.Schema({
     messagesPerDay: { type: Number, default: 1000 },
     messagesPerUser: { type: Number, default: 100 }
   },
+  // إعدادات الـ Webhook
+  webhook: {
+    url: String,
+    events: [String],
+    isEnabled: { type: Boolean, default: false }
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -82,6 +112,7 @@ const botSchema = new mongoose.Schema({
 botSchema.index({ user: 1, name: 1 });
 botSchema.index({ telegramUsername: 1 });
 botSchema.index({ isActive: 1 });
+botSchema.index({ 'pricing.isPaid': 1 });
 
 botSchema.pre('save', function(next) {
   this.updatedAt = new Date();
