@@ -1,45 +1,48 @@
 const mongoose = require('mongoose');
 
 const botSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Bot name is required'],
-    trim: true,
-    maxlength: 50
-  },
-  description: {
-    type: String,
-    maxlength: 500
-  },
-  owner: {
+  user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  telegramBotToken: {
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    maxLength: 50
+  },
+  description: {
+    type: String,
+    maxLength: 500,
+    default: ''
+  },
+  telegramToken: {
     type: String,
     required: true,
     unique: true
   },
-  telegramChatId: {
-    type: String
+  telegramUsername: String,
+  // إعدادات الـ AI
+  aiSettings: {
+    modelName: { type: String, default: 'custom-ai' },
+    systemPrompt: { type: String, default: 'You are a helpful Telegram bot assistant.' },
+    temperature: { type: Number, default: 0.7 },
+    maxTokens: { type: Number, default: 2048 }
   },
-  aiProvider: {
-    type: String,
-    enum: ['openai', 'anthropic', 'google', 'custom'],
-    default: 'openai'
+  // إعدادات المحادثة
+  chatSettings: {
+    maxHistory: { type: Number, default: 20 },
+    language: { type: String, default: 'en' },
+    personality: { type: String, default: 'helpful' }
   },
-  aiModel: {
-    type: String,
-    default: 'gpt-4'
+  // الإحصائيات
+  stats: {
+    totalMessages: { type: Number, default: 0 },
+    totalUsers: { type: Number, default: 0 },
+    avgResponseTime: { type: Number, default: 0 }
   },
-  aiApiKey: {
-    type: String
-  },
-  systemPrompt: {
-    type: String,
-    default: 'You are a helpful AI assistant in Telegram.'
-  },
+  // الحالة
   isActive: {
     type: Boolean,
     default: true
@@ -48,72 +51,41 @@ const botSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  settings: {
-    maxMessagesPerDay: {
-      type: Number,
-      default: 100
-    },
-    responseDelay: {
-      type: Number,
-      default: 0
-    },
-    welcomeMessage: {
-      type: String,
-      default: ''
-    },
-    fallbackMessage: {
-      type: String,
-      default: 'Sorry, I did not understand that.'
-    },
-    language: {
-      type: String,
-      default: 'en'
-    }
+  // الأوامر المخصصة
+  commands: [{
+    name: String,
+    description: String,
+    response: String
+  }],
+  // الكلمات المفتاحية
+  keywords: [{
+    trigger: String,
+    response: String,
+    isRegex: { type: Boolean, default: false }
+  }],
+  // الملفات المسموحة
+  allowedFiles: {
+    images: { type: Boolean, default: true },
+    documents: { type: Boolean, default: true },
+    voice: { type: Boolean, default: true },
+    video: { type: Boolean, default: true }
   },
-  stats: {
-    totalMessages: {
-      type: Number,
-      default: 0
-    },
-    totalUsers: {
-      type: Number,
-      default: 0
-    },
-    todayMessages: {
-      type: Number,
-      default: 0
-    },
-    lastReset: {
-      type: Date,
-      default: Date.now
-    }
+  // القيود
+  limits: {
+    messagesPerDay: { type: Number, default: 1000 },
+    messagesPerUser: { type: Number, default: 100 }
   },
-  integrations: {
-    github: {
-      enabled: {
-        type: Boolean,
-        default: false
-      },
-      repo: String,
-      events: [String]
-    },
-    discord: {
-      enabled: {
-        type: Boolean,
-        default: false
-      },
-      webhookUrl: String
-    },
-    slack: {
-      enabled: {
-        type: Boolean,
-        default: false
-      },
-      webhookUrl: String
-    }
-  }
-}, {
-  timestamps: true
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+botSchema.index({ user: 1, name: 1 });
+botSchema.index({ telegramUsername: 1 });
+botSchema.index({ isActive: 1 });
+
+botSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
 });
 
 module.exports = mongoose.model('Bot', botSchema);
