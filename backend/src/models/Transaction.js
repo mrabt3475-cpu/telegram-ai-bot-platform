@@ -8,12 +8,7 @@ const transactionSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['payment', 'refund', 'subscription', 'referral', 'points'],
-    required: true
-  },
-  method: {
-    type: String,
-    enum: ['stripe', 'binance', 'usdt', 'paypal', 'referral', 'system'],
+    enum: ['credit', 'debit', 'refund', 'bonus'],
     required: true
   },
   amount: {
@@ -26,27 +21,25 @@ const transactionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'completed', 'failed', 'refunded'],
+    enum: ['pending', 'completed', 'failed', 'cancelled'],
     default: 'pending'
   },
-  paymentId: {
-    type: String
-  },
-  transactionHash: {
-    type: String
-  },
-  plan: {
+  paymentMethod: {
     type: String,
-    enum: ['free', 'basic', 'premium', 'enterprise']
+    enum: ['stripe', 'paypal', 'crypto', 'points', 'referral', 'bonus']
   },
-  description: {
-    type: String
-  },
+  description: String,
+  reference: String,
   metadata: {
     type: mongoose.Schema.Types.Mixed
-  }
+  },
+  completedAt: Date
 }, {
   timestamps: true
 });
+
+transactionSchema.index({ user: 1, createdAt: -1 });
+transactionSchema.index({ type: 1 });
+transactionSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Transaction', transactionSchema);
