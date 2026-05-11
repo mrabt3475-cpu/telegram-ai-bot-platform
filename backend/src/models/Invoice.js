@@ -10,21 +10,17 @@ const invoiceSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
-  // النوع
   type: {
     type: String,
-    enum: ['subscription', 'usage', 'bot', 'custom'],
+    enum: ['subscription', 'topup', 'custom', 'refund'],
     required: true
   },
-  // العناصر
   items: [{
-    description: String,
-    quantity: Number,
-    unitPrice: Number,
-    total: Number,
-    bot: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot' }
+    description: { type: String, required: true },
+    quantity: { type: Number, default: 1 },
+    unitPrice: { type: Number, required: true },
+    total: { type: Number, required: true }
   }],
-  // المجموع
   subtotal: {
     type: Number,
     required: true
@@ -45,55 +41,37 @@ const invoiceSchema = new mongoose.Schema({
     type: String,
     default: 'USD'
   },
-  // الرصيد (points)
-  points: {
-    type: Number,
-    default: 0
-  },
-  // الحالة
   status: {
     type: String,
-    enum: ['draft', 'pending', 'paid', 'failed', 'cancelled', 'refunded'],
-    default: 'draft'
+    enum: ['pending', 'paid', 'failed', 'cancelled', 'refunded'],
+    default: 'pending'
   },
-  // طريقة الدفع
   paymentMethod: {
     type: String,
-    enum: ['points', 'stripe', 'paypal', 'crypto', 'free']
+    enum: ['stripe', 'paypal', 'crypto', 'points', 'free']
   },
-  // بيانات الدفع
-  payment: {
-    stripePaymentId: String,
-    paypalPaymentId: String,
-    cryptoTransactionId: String,
-    paidAt: Date
-  },
-  // الاستحقاق
+  paymentId: String,
+  paidAt: Date,
   dueDate: Date,
-  // الملاحظات
   notes: String,
-  // المرفقات
-  attachments: [{
-    name: String,
-    url: String
-  }],
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-  paidAt: Date
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  }
+}, {
+  timestamps: true
 });
 
-invoiceSchema.pre('save', function(next) {
-  if (this.isNew && !this.invoiceNumber) {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-    this.invoiceNumber = `INV-${year}${month}-${random}`;
+// Generate invoice number
+invoiceSchema.pre('save', async function(next) {
+  if (!this.invoiceNumber) {
+    const count = await this.constructor.countDocuments();
+    this.invoiceNumber = `INV-${Date.now()}-${count + 1}`;
   }
-  this.updatedAt = new Date();
   next();
 });
 
+// Indexes
 invoiceSchema.index({ user: 1, createdAt: -1 });
 invoiceSchema.index({ status: 1 });
 invoiceSchema.index({ invoiceNumber: 1 });
