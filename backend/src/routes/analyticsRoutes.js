@@ -1,116 +1,174 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
-const Cost = require('../models/Cost');
-const Invoice = require('../models/Invoice');
 const User = require('../models/User');
 const Bot = require('../models/Bot');
-const mongoose = require('mongoose');
+const Cost = require('../models/Cost');
+const Invoice = require('../models/Invoice');
+const PricingPlan = require('../models/PricingPlan');
 
-// لوحة تحكم متقدمة - الإحصائيات
-router.get('/dashboard-stats', protect, async (req, res) => {
+// لوحة التحكم الرئيسية
+router.get('/dashboard', protect, async (req, res) => {
   try {
     const userId = req.user.id;
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-    startOfWeek.setHours(0, 0, 0, 0);
-
-
-    // إحصائيات البوتات
-    const botsCount = await Bot.countDocuments({ user: userId });
-    const activeBots = await Bot.countDocuments({ user: userId, isActive: true });
+    
+    // إحصائيات المستخدم
+    const [user, bots, recentCosts, pendingInvoices] = await Promise.all([
+      User.findById(userId),
+      Bot.find({ user: userId }),
+      Cost.find({ user: userId }).sort({ createdAt: -1 }).limit(10),
+      Invoice.find({ user: userId, status: 'pending' })
+    ]);
 
     // إحصائيات التكاليف
-    const [dailyCosts, weeklyCosts, monthlyCosts, totalCosts] = await Promise.all([
-      Cost.aggregate([
-        { $match: { user: new mongoose.Types.ObjectId(userId), createdAt: { $gte: new Date(new Date().setHours(0,0,0,0)) } } },
-        { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } }
-      ]),
-      Cost.aggregate([
-        { $match: { user: new mongoose.Types.ObjectId(userId), createdAt: { $gte: startOfWeek } } },
-        { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } }
-      ]),
-      Cost.aggregate([
-        { $match: { user: new mongoose.Types.ObjectId(userId), createdAt: { $gte: startOfMonth } } },
-        { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } }
-      ]),
-      Cost.aggregate([
-        { $match: { user: new mongoose.Types.ObjectId(userId), status: 'paid' } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
-      ])
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const monthlyStats = await Cost.aggregate([
+      { $match: { user: userId, createdAt: { $gte: startOfMonth } } },
+      { $group: { 
+        _id: '$type', 
+        total: { $sum: '$amount' },
+        count: { $sum: 1 },
+        points: { $sum: '$points' }
+      }}
     ]);
 
-    // إحصائيات الفواتير
-    const pendingInvoices = await Invoice.countDocuments({ user: userId, status: 'pending' });
-    const paidInvoices = await Invoice.countDocuments({ user: userId, status: 'paid' });
-
-    // الرصيد
-    const user = await User.findById(userId);
-
-    // تكاليف آخر 7 أيام للرسوم البيانية
-    const last7Days = await Promise.all(
-      Array.from({ length: 7 }, async (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (6 - i));
-        date.setHours(0, 0, 0, 0);
-        const nextDate = new Date(date);
-        nextDate.setDate(nextDate.getDate() + 1);
-
-        const dayCosts = await Cost.aggregate([
-          { $match: { user: new mongoose.Types.ObjectId(userId), createdAt: { $gte: date, $lt: nextDate } } },
-          { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
-        ]);
-
-        return {
-          date: date.toISOString().split('T')[0],
-          amount: dayCosts[0]?.total || 0,
-          count: dayCosts[0]?.count || 0
-        };
-      })
-    );
-
-    // أكثر البوتات تكلفة
-    const topBots = await Cost.aggregate([
-      { $match: { user: new mongoose.Types.ObjectId(userId), bot: { $ne: null } } },
-      { $group: { _id: '$bot', total: { $sum: '$amount' }, count: { $sum: 1 } } },
-      { $sort: { total: -1 } },
-      { $limit: 5 },
-      {
-        $lookup: {
-          from: 'bots',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'botInfo'
-        }
-      },
-      { $unwind: '$botInfo' },
-      { $project: { botName: '$botInfo.name', total: 1, count: 1 } }
+    // إجمالي كل الوقت
+    const totalStats = await Cost.aggregate([
+      { $match: { user: userId, status: 'paid' } },
+      { $group: { 
+        _id: null, 
+        totalSpent: { $sum: '$amount' },
+        totalMessages: { $sum: { $cond: [{ $eq: ['$type', 'message'] }, 1, 0] } },
+        totalImages: { $sum: { $cond: [{ $eq: ['$type', 'image'] }, 1, 0] } }
+      }}
     ]);
 
-    // توزيع التكاليف حسب النوع
-    const costDistribution = await Cost.aggregate([
-      { $match: { user: new mongoose.Types.ObjectId(userId), createdAt: { $gte: startOfMonth } } },
-      { $group: { _id: '$type', value: { $sum: '$amount' }, count: { $sum: 1 } } }
-    ]);
+    // إحصائيات البوتات
+    const botStats = bots.map(bot => ({
+      id: bot._id,
+      name: bot.name,
+      isActive: bot.isActive,
+      messages: bot.stats?.totalMessages || 0,
+      users: bot.stats?.totalUsers || 0,
+      revenue: bot.stats?.totalRevenue || 0
+    }));
+
+    // خطة التسعير
+    const plan = await PricingPlan.findOne({ name: user.subscription });
 
     res.json({
       success: true,
-      stats: {
-        bots: { total: botsCount, active: activeBots },
-        costs: {
-          daily: dailyCosts.reduce((sum, c) => sum + c.total, 0),
-          weekly: weeklyCosts.reduce((sum, c) => sum + c.total, 0),
-          monthly: monthlyCosts.reduce((sum, c) => sum + c.total, 0),
-          total: totalCosts[0]?.total || 0,
-          byType: monthlyCosts
+      data: {
+        user: {
+          username: user.username,
+          email: user.email,
+          points: user.points || 0,
+          subscription: user.subscription,
+          referralCode: user.referralCode
         },
-        invoices: { pending: pendingInvoices, paid: paidInvoices },
-        balance: { points: user.points || 0 },
-        charts: {
-          last7Days,
-          costDistribution,
-          topBots
+        bots: {
+          total: bots.length,
+          active: bots.filter(b => b.isActive).length,
+          list: botStats
+        },
+        costs: {
+          thisMonth: monthlyStats,
+          total: totalStats[0] || { totalSpent: 0, totalMessages: 0, totalImages: 0 },
+          recent: recentCosts
+        },
+        invoices: {
+          pending: pendingInvoices.length,
+          list: pendingInvoices
+        },
+        plan: plan
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// إحصائيات مفصلة للتكاليف
+router.get('/costs/analytics', protect, async (req, res) => {
+  try {
+    const { period = 'month', botId } = req.query;
+    const userId = req.user.id;
+
+    let startDate = new Date();
+    if (period === 'day') startDate.setDate(startDate.getDate() - 1);
+    else if (period === 'week') startDate.setDate(startDate.getDate() - 7);
+    else if (period === 'month') startDate.setMonth(startDate.getMonth() - 1);
+    else if (period === 'year') startDate.setFullYear(startDate.getFullYear() - 1);
+
+    const matchQuery = { user: userId, createdAt: { $gte: startDate } };
+    if (botId) matchQuery.bot = botId;
+
+    // التكاليف اليومية
+    const dailyCosts = await Cost.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          total: { $sum: '$amount' },
+          count: { $sum: 1 },
+          points: { $sum: '$points' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // التكاليف حسب النوع
+    const typeCosts = await Cost.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: '$type',
+          total: { $sum: '$amount' },
+          count: { $sum: 1 },
+          points: { $sum: '$points' }
+        }
+      }
+    ]);
+
+    // أعلى التكاليف
+    const topCosts = await Cost.find(matchQuery)
+      .sort({ amount: -1 })
+      .limit(10)
+      .populate('bot', 'name');
+
+    // مقارنة مع الفترة السابقة
+    const prevStartDate = new Date(startDate);
+    if (period === 'day') prevStartDate.setDate(prevStartDate.getDate() - 1);
+    else if (period === 'week') prevStartDate.setDate(prevStartDate.getDate() - 7);
+    else if (period === 'month') prevStartDate.setMonth(prevStartDate.getMonth() - 1);
+    else if (period === 'year') prevStartDate.setFullYear(prevStartDate.getFullYear() - 1);
+
+    const prevPeriodCosts = await Cost.aggregate([
+      { $match: { user: userId, createdAt: { $gte: prevStartDate, $lt: startDate } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+
+    const currentPeriodTotal = dailyCosts.reduce((sum, d) => sum + d.total, 0);
+    const previousPeriodTotal = prevPeriodCosts[0]?.total || 0;
+    const changePercent = previousPeriodTotal > 0 
+      ? ((currentPeriodTotal - previousPeriodTotal) / previousPeriodTotal * 100).toFixed(1)
+      : 0;
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        daily: dailyCosts,
+        byType: typeCosts,
+        topCosts,
+        summary: {
+          currentPeriod: currentPeriodTotal,
+          previousPeriod: previousPeriodTotal,
+          change: changePercent,
+          currency: 'USD'
         }
       }
     });
@@ -119,70 +177,113 @@ router.get('/dashboard-stats', protect, async (req, res) => {
   }
 });
 
-// تقارير التكاليف المفصلة
-router.get('/costs/report', protect, async (req, res) => {
+// إحصائيات البوتات
+router.get('/bots/analytics', protect, async (req, res) => {
   try {
-    const { startDate, endDate, type, botId, groupBy = 'day' } = req.query;
     const userId = req.user.id;
+    const bots = await Bot.find({ user: userId });
 
-    const match = { user: new mongoose.Types.ObjectId(userId) };
-    if (startDate || endDate) {
-      match.createdAt = {};
-      if (startDate) match.createdAt.$gte = new Date(startDate);
-      if (endDate) match.createdAt.$lte = new Date(endDate);
-    }
-    if (type) match.type = type;
-    if (botId) match.bot = new mongoose.Types.ObjectId(botId);
+    // إحصائيات كل بوت
+    const botAnalytics = await Promise.all(bots.map(async (bot) => {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
 
+      const monthlyMessages = await Cost.countDocuments({
+        bot: bot._id,
+        type: 'message',
+        createdAt: { $gte: startOfMonth }
+      });
 
-    let groupStage;
-    switch (groupBy) {
-      case 'hour':
-        groupStage = {
-          _id: { $dateToString: { format: '%Y-%m-%d %H:00', date: '$createdAt' } },
-          total: { $sum: '$amount' },
-          count: { $sum: 1 }
-        };
-        break;
-      case 'month':
-        groupStage = {
-          _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
-          total: { $sum: '$amount' },
-          count: { $sum: 1 }
-        };
-        break;
-      default: // day
-        groupStage = {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          total: { $sum: '$amount' },
-          count: { $sum: 1 }
-        };
-    }
+      return {
+        id: bot._id,
+        name: bot.name,
+        username: bot.telegramUsername,
+        isActive: bot.isActive,
+        stats: {
+          totalMessages: bot.stats?.totalMessages || 0,
+          totalUsers: bot.stats?.totalUsers || 0,
+          totalRevenue: bot.stats?.totalRevenue || 0,
+          messagesThisMonth: monthlyMessages,
+          avgResponseTime: bot.stats?.avgResponseTime || 0
+        },
+        pricing: bot.pricing
+      };
+    }));
 
-    const report = await Cost.aggregate([
-      { $match: match },
-      { $group: groupStage },
-      { $sort: { _id: -1 } },
-      { $limit: 100 }
-    ]);
+    // إجمالي الإحصائيات
+    const totalStats = botAnalytics.reduce((acc, bot) => ({
+      messages: acc.messages + bot.stats.totalMessages,
+      users: acc.users + bot.stats.totalUsers,
+      revenue: acc.revenue + bot.stats.totalRevenue
+    }), { messages: 0, users: 0, revenue: 0 });
 
-    // المجموع
-    const totals = await Cost.aggregate([
-      { $match: match },
+    res.json({
+      success: true,
+      data: {
+        bots: botAnalytics,
+        total: totalStats
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// تقارير الإيرادات
+router.get('/revenue', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { period = 'month' } = req.query;
+
+    let startDate = new Date();
+    if (period === 'day') startDate.setDate(startDate.getDate() - 1);
+    else if (period === 'week') startDate.setDate(startDate.getDate() - 7);
+    else if (period === 'month') startDate.setMonth(startDate.getMonth() - 1);
+    else if (period === 'year') startDate.setFullYear(startDate.getFullYear() - 1);
+
+    // الإيرادات من الفواتير المدفوعة
+    const revenue = await Invoice.aggregate([
+      { 
+        $match: { 
+          user: userId, 
+          status: 'paid',
+          paidAt: { $gte: startDate }
+        } 
+      },
       {
         $group: {
-          _id: null,
-          totalAmount: { $sum: '$amount' },
-          totalPoints: { $sum: '$points' },
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$paidAt' } },
+          total: { $sum: '$total' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // الإيرادات حسب النوع
+    const byType = await Invoice.aggregate([
+      { $match: { user: userId, status: 'paid', paidAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: '$type',
+          total: { $sum: '$total' },
           count: { $sum: 1 }
         }
       }
     ]);
 
+    // إجمالي الإيرادات
+    const totalRevenue = revenue.reduce((sum, r) => sum + r.total, 0);
+
     res.json({
       success: true,
-      report,
-      totals: totals[0] || { totalAmount: 0, totalPoints: 0, count: 0 }
+      data: {
+        period,
+        revenue,
+        byType,
+        total: totalRevenue
+      }
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -193,142 +294,72 @@ router.get('/costs/report', protect, async (req, res) => {
 router.get('/alerts', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    const plan = await require('../models/PricingPlan').findOne({ name: user.subscription });
+    const plan = await PricingPlan.findOne({ name: user.subscription });
     
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const usage = await Cost.aggregate([
+      { $match: { user: user._id, createdAt: { $gte: startOfMonth } } },
+      { $group: { _id: '$type', count: { $sum: 1 } } }
+    ]);
+
     const alerts = [];
     
-    // التحقق من الرصيد
-    if ((user.points || 0) < 50) {
+    // التحقق من حد الرسائل
+    const messageUsage = usage.find(u => u._id === 'message')?.count || 0;
+    const messageLimit = plan?.limits?.messagesPerMonth || 100;
+    const messagePercent = (messageUsage / messageLimit) * 100;
+    
+    if (messagePercent >= 90) {
+      alerts.push({
+        type: 'danger',
+        title: 'اقتربت من حد الرسائل',
+        message: `استخدمت ${messageUsage} من ${messageLimit} رسالة (${messagePercent.toFixed(0)}%)`
+      });
+    } else if (messagePercent >= 75) {
       alerts.push({
         type: 'warning',
-        title: 'Low Balance',
-        message: `You only have ${user.points} points remaining. Add more to avoid interruption.`,
-        priority: 'high'
+        title: 'تحذير: استخدام عالي',
+        message: `استخدمت ${messageUsage} من ${messageLimit} رسالة (${messagePercent.toFixed(0)}%)`
       });
     }
 
-    // التحقق من حدود الخطة
-    const monthlyCosts = await Cost.countDocuments({
-      user: req.user.id,
-      createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
-    });
-
-    const limit = plan?.limits?.messagesPerMonth || 100;
-    const usagePercent = (monthlyCosts / limit) * 100;
-
-    if (usagePercent >= 90) {
-      alerts.push({
-        type: 'danger',
-        title: 'Usage Limit Warning',
-        message: `You've used ${usagePercent.toFixed(0)}% of your monthly limit.`,
-        priority: 'high'
-      });
-    } else if (usagePercent >= 75) {
+    // التحقق من الرصيد
+    if ((user.points || 0) < 10) {
       alerts.push({
         type: 'warning',
-        title: 'Usage Notice',
-        message: `You've used ${usagePercent.toFixed(0)}% of your monthly limit.`,
-        priority: 'medium'
+        title: 'رصيد منخفض',
+        message: `رصيدك ${user.points} نقاط فقط. فكر في إضافة رصيد.`
       });
     }
 
     // التحقق من البوتات
-    const inactiveBots = await Bot.countDocuments({ user: req.user.id, isActive: false });
-    if (inactiveBots > 0) {
+    const bots = await Bot.find({ user: user._id });
+    const activeBots = bots.filter(b => b.isActive).length;
+    const botLimit = plan?.limits?.bots || 1;
+    
+    if (activeBots >= botLimit) {
       alerts.push({
         type: 'info',
-        title: 'Inactive Bots',
-        message: `You have ${inactiveBots} inactive bots.`,
-        priority: 'low'
+        title: 'حد البوتات',
+        message: `لديك ${activeBots} من ${botLimit} بوتات نشطة`
       });
     }
 
-    res.json({ success: true, alerts });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// تصدير التقرير
-router.get('/costs/export', protect, async (req, res) => {
-  try {
-    const { format = 'json', startDate, endDate } = req.query;
-    
-    const match = { user: req.user.id };
-    if (startDate || endDate) {
-      match.createdAt = {};
-      if (startDate) match.createdAt.$gte = new Date(startDate);
-      if (endDate) match.createdAt.$lte = new Date(endDate);
-    }
-
-    const costs = await Cost.find(match)
-      .populate('bot', 'name')
-      .sort({ createdAt: -1 })
-      .lean();
-
-
-    if (format === 'csv') {
-      const csv = [
-        'Date,Type,Description,Amount,Points,Status,Bot',
-        ...costs.map(c => 
-          `${new Date(c.createdAt).toISOString()},${c.type},"${c.description || ''}",${c.amount},${c.points},${c.status},${c.bot?.name || ''}`
-        )
-      ].join('\n');
-      
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename=costs-report.csv');
-      return res.send(csv);
-    }
-
-    res.json({ success: true, costs });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// ميزانية المستخدم
-router.get('/budget', protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    const plan = await require('../models/PricingPlan').findOne({ name: user.subscription });
-    
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    
-    const monthlySpend = await Cost.aggregate([
-      { $match: { user: req.user.id, createdAt: { $gte: startOfMonth }, status: 'paid' } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]);
-
-    const budget = plan?.price || 0;
-    const spent = monthlySpend[0]?.total || 0;
-    const remaining = Math.max(0, budget - spent);
-    const percentUsed = budget > 0 ? (spent / budget) * 100 : 0;
-
     res.json({
       success: true,
-      budget: {
-        limit: budget,
-        spent,
-        remaining,
-        percentUsed,
-        currency: 'USD'
+      data: {
+        alerts,
+        usage: {
+          messages: messageUsage,
+          limit: messageLimit,
+          percent: messagePercent.toFixed(0)
+        },
+        points: user.points || 0
       }
     });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// تعيين ميزانية مخصصة
-router.post('/budget', protect, async (req, res) => {
-  try {
-    const { monthlyLimit } = req.body;
-    
-    await User.findByIdAndUpdate(req.user.id, {
-      budget: { monthlyLimit, resetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1) }
-    });
-
-    res.json({ success: true, message: 'Budget updated' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
