@@ -23,41 +23,35 @@ const botSchema = new mongoose.Schema({
     unique: true
   },
   telegramUsername: String,
-  // إعدادات الـ AI
+  telegramChatId: String,
+  // AI Settings
   aiSettings: {
-    modelName: { type: String, default: 'custom-ai' },
+    modelName: { type: String, default: 'gpt-3.5-turbo' },
     systemPrompt: { type: String, default: 'You are a helpful Telegram bot assistant.' },
     temperature: { type: Number, default: 0.7 },
-    maxTokens: { type: Number, default: 2048 }
+    maxTokens: { type: Number, default: 1000 },
+    personality: { type: String, default: 'helpful' },
+    responseStyle: { type: String, default: 'friendly' }
   },
-  // إعدادات التكلفة
+  // Pricing
   pricing: {
-    // هل يتم charging لكل رسالة
     isPaid: { type: Boolean, default: false },
-    // السعر لكل رسالة
     pricePerMessage: { type: Number, default: 0 },
-    // السعر لكل صورة
     pricePerImage: { type: Number, default: 0 },
-    // العملة
     currency: { type: String, default: 'USD' },
-    // الرصيد المطلوب
     requiredPoints: { type: Number, default: 0 },
-    // هل المجاني
     isFree: { type: Boolean, default: true },
-    // حد الرسائل المجانية
     freeMessages: { type: Number, default: 100 }
   },
-  // إعدادات المحادثة
+  // Chat Settings
   chatSettings: {
     maxHistory: { type: Number, default: 20 },
     language: { type: String, default: 'en' },
     personality: { type: String, default: 'helpful' },
-    // تفعيل/تعطيل
     isEnabled: { type: Boolean, default: true },
-    // وضع الصمت
     isMuted: { type: Boolean, default: false }
   },
-  // الإحصائيات
+  // Stats
   stats: {
     totalMessages: { type: Number, default: 0 },
     totalUsers: { type: Number, default: 0 },
@@ -66,7 +60,7 @@ const botSchema = new mongoose.Schema({
     messagesToday: { type: Number, default: 0 },
     messagesThisMonth: { type: Number, default: 0 }
   },
-  // الحالة
+  // Status
   isActive: {
     type: Boolean,
     default: true
@@ -75,31 +69,31 @@ const botSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  // الأوامر المخصصة
+  // Custom Commands
   commands: [{
     name: String,
     description: String,
     response: String
   }],
-  // الكلمات المفتاحية
+  // Keywords
   keywords: [{
     trigger: String,
     response: String,
     isRegex: { type: Boolean, default: false }
   }],
-  // الملفات المسموحة
+  // Allowed Files
   allowedFiles: {
     images: { type: Boolean, default: true },
     documents: { type: Boolean, default: true },
     voice: { type: Boolean, default: true },
     video: { type: Boolean, default: true }
   },
-  // القيود
+  // Limits
   limits: {
     messagesPerDay: { type: Number, default: 1000 },
     messagesPerUser: { type: Number, default: 100 }
   },
-  // إعدادات الـ Webhook
+  // Webhook
   webhook: {
     url: String,
     events: [String],
