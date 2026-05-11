@@ -1,76 +1,101 @@
-const winston = require('winston');
-const path = require('path');
-const fs = require('fs');
+const logger = {
+  // مستويات التسجيل
+  levels: {
+    error: 0,
+    warn: 1,
+    info: 2,
+    http: 3,
+    debug: 4
+  },
 
-const logsDir = path.join(__dirname, '../logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
+  currentLevel: process.env.LOG_LEVEL || 'info',
 
-const colors = {
-  error: 'red',
-  warn: 'yellow',
-  info: 'green',
-  http: 'magenta',
-  debug: 'blue'
-};
+  // لون الـ console
+  colors: {
+    error: 'red',
+    warn: 'yellow',
+    info: 'green',
+    http: 'magenta',
+    debug: 'blue'
+  },
 
-winston.addColors(colors);
+  // تسجيل
+  log(level, message, meta = {}) {
+    const levelNum = this.levels[level] || 4;
+    const currentLevelNum = this.levels[this.currentLevel] || 2;
 
-const format = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  winston.format.errors({ stack: true }),
-  winston.format.json(),
-  winston.format.printf(({ timestamp, level, message, ...meta }) => {
-    let log = `${timestamp} [${level.toUpperCase()}]: ${message}`;
-    if (Object.keys(meta).length > 0) {
-      log += ` ${JSON.stringify(meta)}`;
-    }
-    return log;
-  })
-);
+    if (levelNum > currentLevelNum) return;
 
-const consoleFormat = winston.format.combine(
-  winston.format.colorize({ all: true }),
-  winston.format.timestamp({ format: 'HH:mm:ss' }),
-  winston.format.printf(({ timestamp, level, message }) => {
-    return `${timestamp} ${level}: ${message}`;
-  })
-);
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      timestamp,
+      level: level.toUpperCase(),
+      message,
+      ...meta
+    };
 
-const transports = [
-  new winston.transports.Console({
-    format: consoleFormat,
-    level: process.env.LOG_LEVEL || 'info'
-  }),
-  new winston.transports.File({
-    filename: path.join(logsDir, 'error.log'),
-    level: 'error',
-    maxsize: 5242880,
-    maxFiles: 5
-  }),
-  new winston.transports.File({
-    filename: path.join(logsDir, 'combined.log'),
-    maxsize: 5242880,
-    maxFiles: 5
-  })
-];
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format,
-  transports,
-  exitOnError: false
-});
+    // console.log(JSON.stringify(logEntry));
+    console.log(`[${timestamp}] ${level.toUpperCase()}: ${message}`, meta);
+  },
 
-logger.stream = {
-  write: (message) => {
-    logger.http(message.trim());
+  error(message, meta) {
+    this.log('error', message, meta);
+  },
+
+  warn(message, meta) {
+    this.log('warn', message, meta);
+  },
+
+  info(message, meta) {
+    this.log('info', message, meta);
+  },
+
+  http(message, meta) {
+    this.log('http', message, meta);
+  },
+
+  debug(message, meta) {
+    this.log('debug', message, meta);
   }
 };
 
-logger.logError = (error, context = {}) => {
-  logger.error(error.message, { stack: error.stack, ...context });
+/**
+ * Request Logger Middleware
+ */
+const requestLogger = (req, res, next) => {
+  const start = Date.now();
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logger.http(`${req.method} ${req.url}`, {
+      status: res.statusCode,
+      duration: `${duration}ms`,
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    });
+  });
+
+  next();
 };
 
-module.exports = logger;
+/**
+ * Error Logger Middleware
+ */
+const errorLogger = (err, req, res, next) => {
+  logger.error(err.message, {
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    body: req.body,
+    params: req.params,
+    query: req.query
+  });
+  next(err);
+};
+
+module.exports = {
+  logger,
+  requestLogger,
+  errorLogger
+};
