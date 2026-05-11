@@ -1,106 +1,108 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  username: { 
-    type: String, 
-    required: true, 
+  username: {
+    type: String,
+    required: true,
     unique: true,
     trim: true,
     minLength: 3,
     maxLength: 30
   },
-  email: { 
-    type: String, 
-    required: true, 
+  email: {
+    type: String,
+    required: true,
     unique: true,
-    lowercase: true,
-    trim: true
+    trim: true,
+    lowercase: true
   },
-  password: { 
-    type: String, 
+  password: {
+    type: String,
     required: true,
     minLength: 6
   },
-  subscription: { 
-    type: String, 
-    enum: ['free', 'basic', 'premium', 'enterprise'], 
-    default: 'free' 
+  // Points/Balance
+  points: {
+    type: Number,
+    default: 100 // Free starter points
+  },
+  // Subscription
+  subscription: {
+    type: String,
+    enum: ['free', 'basic', 'premium', 'enterprise', 'vip_king'],
+    default: 'free'
   },
   subscriptionExpiresAt: Date,
-  points: { 
-    type: Number, 
-    default: 0,
-    min: 0
-  },
-  referrals: [{ 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User' 
-  }],
-  referralCode: { 
-    type: String, 
-    unique: true 
-  },
-  telegramChatId: String,
-  apiKey: {
-    type: String,
-    unique: true,
-    sparse: true
-  },
-  apiRequestsThisMonth: { 
-    type: Number, 
-    default: 0 
-  },
-  apiLimit: { 
-    type: Number, 
-    default: 1000 
-  },
-  usage: {
-    messages: { type: Number, default: 0 },
-    images: { type: Number, default: 0 },
-    apiRequests: { type: Number, default: 0 }
-  },
-  // إعدادات الـ AI Model المخصص
+  // AI Configuration
   aiConfig: {
     endpoint: String,
     apiKey: String,
-    modelName: String,
-    temperature: { type: Number, default: 0.7 },
-    maxTokens: { type: Number, default: 2048 }
+    modelName: { type: String, default: 'gpt-3.5-turbo' }
   },
-  // تكامل Telegram فقط
-  integrations: {
-    telegram: {
-      botToken: String,
-      botUsername: String,
-      botName: String,
-      isActive: { type: Boolean, default: false },
-      connectedAt: Date
-    }
+  // Payment Configuration
+  paymentConfig: {
+    stripeCustomerId: String,
+    paypalEmail: String,
+    cryptoAddress: String,
+    cryptoCurrency: String
   },
-  webhooks: [{
-    id: String,
-    url: String,
-    events: [String],
-    createdAt: Date
-  }],
-  isActive: { type: Boolean, default: true },
+  // Budget
+  budget: {
+    monthlyLimit: { type: Number, default: 0 },
+    resetDate: Date
+  },
+  // Profile
+  profile: {
+    avatar: String,
+    bio: String,
+    timezone: { type: String, default: 'UTC' }
+  },
+  // Settings
+  settings: {
+    emailNotifications: { type: Boolean, default: true },
+    telegramNotifications: { type: Boolean, default: false },
+    darkMode: { type: Boolean, default: false },
+    language: { type: String, default: 'en' }
+  },
+  // Status
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
   lastLogin: Date,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
 
-// تحديث timestamp تلقائياً
-userSchema.pre('save', function(next) {
+// Hash password
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 12);
   this.updatedAt = new Date();
   next();
 });
 
-// إنشاء referral code
-userSchema.pre('save', function(next) {
-  if (this.isNew && !this.referralCode) {
-    this.referralCode = `REF${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-  }
-  next();
-});
+// Compare password
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Get public profile
+userSchema.methods.getPublicProfile = function() {
+  return {
+    id: this._id,
+    username: this.username,
+    email: this.email,
+    points: this.points,
+    subscription: this.subscription,
+    profile: this.profile,
+    createdAt: this.createdAt
+  };
+};
 
 module.exports = mongoose.model('User', userSchema);
