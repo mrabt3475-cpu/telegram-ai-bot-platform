@@ -10,6 +10,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const integrationRoutes = require('./routes/integrationRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const costRoutes = require('./routes/costRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/costs', costRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
