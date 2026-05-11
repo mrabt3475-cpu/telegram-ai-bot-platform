@@ -1,22 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const axios = require('axios');
 const { protect } = require('../middleware/auth');
+const User = require('../models/User');
 const Cost = require('../models/Cost');
 const Invoice = require('../models/Invoice');
-const User = require('../models/User');
-const Bot = require('../models/Bot');
+const PricingPlan = require('../models/PricingPlan');
 
 // ============ التكاليف ============
 
 // قائمة تكاليف المستخدم
 router.get('/costs', protect, async (req, res) => {
   try {
-    const { type, status, startDate, endDate, page = 1, limit = 20 } = req.query;
+    const { type, status, startDate, endDate, page = 1, limit = 20, botId } = req.query;
     
     const query = { user: req.user.id };
     if (type) query.type = type;
     if (status) query.status = status;
+    if (botId) query.bot = botId;
     if (startDate || endDate) {
       query.createdAt = {};
       if (startDate) query.createdAt.$gte = new Date(startDate);
@@ -74,8 +74,7 @@ router.post('/costs/calculate', protect, async (req, res) => {
     const { type, botId, messageLength, hasImage } = req.body;
     const user = await User.findById(req.user.id);
     
-    // الحصول على خطة التسعير
-    const plan = await require('../models/PricingPlan').findOne({ name: user.subscription });
+    const plan = await PricingPlan.findOne({ name: user.subscription });
     const overage = plan?.overageCosts || {};
 
     let cost = 0;
@@ -163,7 +162,7 @@ router.post('/invoices', protect, async (req, res) => {
       total,
       notes,
       status: 'pending',
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 يوم
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     });
 
     await invoice.save();
@@ -175,18 +174,17 @@ router.post('/invoices', protect, async (req, res) => {
 
 // ============ الرصيد (Points) ============
 
+
 // رصيد المستخدم
 router.get('/balance', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     
-    // حساب إجمالي الإنفاق
     const totalSpent = await Cost.aggregate([
       { $match: { user: req.user.id, status: 'paid' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
 
-    // تكاليف هذا الشهر
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
@@ -221,7 +219,6 @@ router.post('/balance/add', protect, async (req, res) => {
       { new: true }
     );
 
-    // تسجيل العملية
     const cost = new Cost({
       user: req.user.id,
       type: 'custom',
@@ -246,7 +243,7 @@ router.post('/balance/add', protect, async (req, res) => {
 // قائمة الخطط
 router.get('/plans', async (req, res) => {
   try {
-    const plans = await require('../models/PricingPlan').find({ isPublic: true }).sort({ order: 1 });
+    const plans = await PricingPlan.find({ isPublic: true }).sort({ order: 1 });
     res.json({ success: true, plans });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -258,7 +255,6 @@ router.post('/plans/custom', protect, async (req, res) => {
   try {
     const { limits, overageCosts, customPrice } = req.body;
     
-    // إنشاء طلب تخصيص
     const invoice = new Invoice({
       user: req.user.id,
       type: 'custom',
