@@ -4,69 +4,76 @@ const pricingPlanSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
+    enum: ['free', 'starter', 'pro', 'enterprise', 'vip']
   },
-  // السعر
+  displayName: {
+    type: String,
+    required: true
+  },
+  description: String,
   price: {
     type: Number,
     required: true,
     min: 0
   },
-  currency: {
-    type: String,
-    default: 'USD'
-  },
-  // الفترة (شهرية/سنوية)
   period: {
     type: String,
-    enum: ['monthly', 'yearly'],
-    default: 'monthly'
+    enum: ['month', 'year', 'lifetime'],
+    default: 'month'
   },
-  // الوصف
-  description: String,
-  // الميزات
-  features: [String],
-  // الحدود
-  limits: {
-    bots: { type: Number, default: 1 },
-    messagesPerMonth: { type: Number, default: 1000 },
-    imagesPerMonth: { type: Number, default: 50 },
-    storage: { type: Number, default: 100 }, // MB
-    apiCallsPerDay: { type: Number, default: 100 }
-  },
-  // التكلفة لكل رسالة إضافية
-  overageCosts: {
-    message: { type: Number, default: 0.001 },
-    image: { type: Number, default: 0.01 },
-    apiCall: { type: Number, default: 0.001 }
-  },
-  // هل هو عام
-  isPublic: {
-    type: Boolean,
-    default: true
-  },
-  // الترتيب
-  order: {
-    type: Number,
-    default: 0
-  },
-  // هل يظهر كـ popular
   isPopular: {
     type: Boolean,
     default: false
   },
-  // الألوان
-  color: {
-    type: String,
-    default: '#3B82F6'
+  isVip: {
+    type: Boolean,
+    default: false
   },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  isPublic: {
+    type: Boolean,
+    default: true
+  },
+  order: {
+    type: Number,
+    default: 0
+  },
+  // Limits
+  limits: {
+    bots: { type: Number, default: 1 },
+    messagesPerMonth: { type: Number, default: 100 },
+    imagesPerMonth: { type: Number, default: 10 },
+    storage: { type: Number, default: 100 }, // MB
+    apiCalls: { type: Number, default: 1000 },
+    usersPerBot: { type: Number, default: 100 },
+    customCommands: { type: Number, default: 5 },
+    keywords: { type: Number, default: 10 }
+  },
+  // Features
+  features: [String],
+  // Overage costs
+  overageCosts: {
+    message: { type: Number, default: 0.001 },
+    image: { type: Number, default: 0.01 },
+    voice: { type: Number, default: 0.005 },
+    apiCall: { type: Number, default: 0.001 }
+  },
+  // Support
+  supportLevel: {
+    type: String,
+    enum: ['community', 'email', 'priority', '24/7'],
+    default: 'community'
+  },
+  // Stripe
+  stripePriceId: String,
+  stripeProductId: String,
+  // PayPal
+  paypalPlanId: String
+}, {
+  timestamps: true
 });
 
-pricingPlanSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
+pricingPlanSchema.index({ order: 1 });
+pricingPlanSchema.index({ isPublic: 1 });
 
 module.exports = mongoose.model('PricingPlan', pricingPlanSchema);
