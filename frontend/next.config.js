@@ -4,6 +4,11 @@ const nextConfig = {
   images: {
     domains: ['avatars.githubusercontent.com', 'lh3.googleusercontent.com'],
   },
+  experimental: {
+    serverActions: {
+      allowedOrigins: (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean),
+    },
+  },
   async rewrites() {
     return [
       {
