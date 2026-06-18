@@ -1,60 +1,48 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
 
-export default function Login() {
-  const router = useRouter();
-  const [form, setForm] = useState({ email: '', password: '' });
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const router = useRouter();
 
-  const handleSubmit = async (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    setLoading(true);
     try {
-      const res = await axios.post('http://localhost:3000/api/auth/login', form);
-      localStorage.setItem('token', res.data.token);
+      await login(email, password);
       router.push('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="card w-full max-w-md">
-        <h1 className="text-2xl font-bold text-center mb-6">Login</h1>
-        {error && <div className="bg-red-100 text-red-600 p-3 rounded mb-4">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-gray-700 mb-2">Email</label>
-            <input
-              type="email"
-              className="input"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-            />
-          </div>
-          <div className="mb-6">
-            <label className="block text-gray-700 mb-2">Password</label>
-            <input
-              type="password"
-              className="input"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-            />
-          </div>
-          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-            {loading ? 'Loading...' : 'Login'}
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="max-w-md w-full bg-white p-8 rounded-lg shadow">
+        <h2 className="text-2xl font-bold mb-6 text-center">Sign In</h2>
+        {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
+        <form onSubmit={onSubmit} className="space-y-4">
+          <input type="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-primary outline-none" />
+          <input type="password" placeholder="Password" required value={password} onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-primary outline-none" />
+          <button type="submit" disabled={loading}
+            className="w-full bg-primary text-white py-2 rounded hover:opacity-90 disabled:opacity-50">
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-        <p className="text-center mt-4 text-gray-600">
-          Don't have an account? <a href="/register" className="text-primary">Register</a>
+        <p className="mt-4 text-center text-sm text-gray-600">
+          No account? <Link href="/register" className="text-primary font-semibold">Sign up</Link>
         </p>
       </div>
     </div>
