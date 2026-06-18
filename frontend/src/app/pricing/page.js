@@ -1,68 +1,50 @@
-import Link from 'next/link';
-import axios from 'axios';
+'use client';
+import { useEffect, useState } from 'react';
+import api from '@/lib/api';
 
-async function getPlans() {
-  try {
-    const res = await axios.get('http://localhost:3000/api/payments/plans');
-    return res.data.plans;
-  } catch {
-    return {
-      basic: { price: 9.99, name: 'Basic', bots: 3, messages: 1000 },
-      premium: { price: 29.99, name: 'Premium', bots: 10, messages: 10000 },
-      enterprise: { price: 99.99, name: 'Enterprise', bots: 50, messages: 100000 }
-    };
-  }
-}
+export default function PricingPage() {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-export default async function Pricing() {
-  const plans = await getPlans();
-  const planKeys = Object.keys(plans);
+  useEffect(() => {
+    api.get('/api/payment/plans').then((r) => setPlans(r.plans || [])).catch(() => {}).finally(() => setLoading(false));
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-20">
-      <div className="max-w-7xl mx-auto px-4">
-        <h1 className="text-4xl font-bold text-center mb-4">Choose Your Plan</h1>
-        <p className="text-xl text-gray-600 text-center mb-12">Select the perfect plan for your needs</p>
+    <div className="max-w-6xl mx-auto px-4 py-16">
+      <h1 className="text-4xl font-bold text-center mb-4">Simple, transparent pricing</h1>
+      <p className="text-center text-gray-600 mb-12">Choose the plan that fits your needs.</p>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {planKeys.map((key) => {
-            const plan = plans[key];
-            return (
-              <div key={key} className="card text-center">
-                <h2 className="text-2xl font-bold mb-2">{plan.name}</h2>
-                <div className="text-4xl font-bold text-primary mb-4">
-                  ${plan.price}<span className="text-lg text-gray-500">/month</span>
-                </div>
-                <ul className="text-left mb-6 space-y-2">
-                  <li className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span> {plan.bots} bots
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span> {plan.messages.toLocaleString()} messages/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span> All integrations
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span> Priority support
-                  </li>
-                </ul>
-                <Link href={`/register?plan=${key}`} className="btn btn-primary w-full">
-                  Get Started
-                </Link>
-              </div>
-            );
-          })}
+      {loading ? <p className="text-center">Loading plans...</p> : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {plans.length === 0 ? (
+            <>
+              <PlanCard name="Starter" price={0} credits={100} features={['1 Bot', '100 credits/mo', 'Community support']} />
+              <PlanCard name="Pro" price={29} credits={5000} features={['5 Bots', '5,000 credits/mo', 'Priority support', 'Analytics']} highlight />
+              <PlanCard name="Enterprise" price={99} credits={25000} features={['Unlimited bots', '25,000 credits/mo', 'Dedicated support', 'Custom integrations']} />
+            </>
+          ) : plans.map((p) => (
+            <PlanCard key={p._id} name={p.name} price={p.price} credits={p.credits} features={p.features || []} />
+          ))}
         </div>
+      )}
+    </div>
+  );
+}
 
-        <div className="mt-16 text-center">
-          <h2 className="text-2xl font-bold mb-4">Need a custom plan?</h2>
-          <p className="text-gray-600 mb-6">Contact us for enterprise solutions</p>
-          <a href="mailto:support@telegram-ai-bot.com" className="btn btn-secondary">
-            Contact Sales
-          </a>
-        </div>
-      </div>
+function PlanCard({ name, price, credits, features, highlight }) {
+  return (
+    <div className={`bg-white p-8 rounded-lg shadow ${highlight ? 'ring-2 ring-primary' : ''}`}>
+      {highlight && <span className="bg-primary text-white text-xs px-2 py-1 rounded">POPULAR</span>}
+      <h3 className="text-2xl font-bold mt-2">{name}</h3>
+      <p className="text-4xl font-bold mt-4">${price}<span className="text-lg text-gray-500">/mo</span></p>
+      <p className="text-gray-600 mt-2">{credits} credits/month</p>
+      <ul className="mt-6 space-y-2 text-sm">
+        {features.map((f, i) => <li key={i}>✓ {f}</li>)}
+      </ul>
+      <a href="/register" className={`mt-6 block text-center py-2 rounded ${highlight ? 'bg-primary text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>
+        Get started
+      </a>
     </div>
   );
 }
